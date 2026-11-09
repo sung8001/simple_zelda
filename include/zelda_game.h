@@ -26,8 +26,9 @@ typedef struct {
     int potion_inventory;
     int move_range;
     int has_master_sword;
-    int boss_slain[4];
+    int boss_slain[4];    // 0:사막(전기), 1:조라(물), 2:데스마운틴(불), 3:리토(바람)
     
+    // 4대 영걸 증표
     int token_urbosa; 
     int token_mipha;  
     int token_daruk;  
@@ -40,7 +41,7 @@ typedef struct {
 } HeroState;
 
 typedef struct {
-    char name[64];  // 한글+이모지가 들어가도록 배열 크기를 32에서 64로 확장
+    char name[32];
     int hp, max_hp;
     int base_damage;
     char symbol[8];

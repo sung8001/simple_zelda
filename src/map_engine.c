@@ -24,38 +24,55 @@ static void trigger_random_field_event(HeroState *hero) {
     int roll = rand() % 100;
     if (roll < 10) {
         hero->potion_inventory++;
-        print_dialog_text(hero, "이벤트", "길목에서 비밀 상자를 찾아 회복 포션 1개를 획득했습니다!");
+        print_dialog_text("🎁 보물상자 발견!", "길목에서 비밀 상자를 찾아 회복 포션 1개를 획득했습니다!");
     } else if (roll >= 10 && roll < 18) {
-        print_dialog_text(hero, "이벤트", "야생의 보코블린이 튀어나왔습니다!");
-        if (rand() % 2 == 0) {
+        print_dialog_text("👾 몬스터 습격!", "야생의 보코블린이 튀어나왔습니다!");
+        int sub_roll = rand() % 2;
+        if (sub_roll == 0) {
             hero->current_hp -= 15;
-            print_dialog_text(hero, "시스템", "기습을 당해 HP가 감소했습니다.");
+            print_dialog_text("피해 발생 💥", "기습을 당해 HP가 15 감소했습니다.");
         } else {
             hero->total_score += 300;
-            print_dialog_text(hero, "시스템", "반격하여 물리치고 점수를 획득했습니다!");
+            print_dialog_text("격퇴 성공 ⚔️", "잽싸게 몬스터를 반격하여 물리쳤습니다! (+300 점)");
         }
     }
 }
 
 int process_hero_movement(HeroState *hero, int key_input) {
-    struct timeval now; gettimeofday(&now, NULL);
+    struct timeval now;
+    gettimeofday(&now, NULL);
+
     long diff_ms = (now.tv_sec - g_last_time.tv_sec) * 1000 + (now.tv_usec - g_last_time.tv_usec) / 1000;
     int step = 1;
-    if (hero->token_revali && (key_input == g_last_key) && (diff_ms < 350)) step = 2;
-    g_last_key = key_input; g_last_time = now;
 
-    int nx = hero->pos_x, ny = hero->pos_y, moved = 0;
-    if (key_input == 'w' || key_input == 'W') ny -= step;
-    else if (key_input == 's' || key_input == 'S') ny += step;
-    else if (key_input == 'a' || key_input == 'A') nx -= step;
-    else if (key_input == 'd' || key_input == 'D') nx += step;
+    if (hero->token_revali && (key_input == g_last_key) && (diff_ms < 350)) {
+        step = 2;
+    }
+
+    g_last_key = key_input;
+    g_last_time = now;
+
+    int nx = hero->pos_x;
+    int ny = hero->pos_y;
+    int moved = 0;
+
+    if (key_input == 'w' || key_input == 'W' || key_input == KEY_UP) ny -= step;
+    else if (key_input == 's' || key_input == 'S' || key_input == KEY_DOWN) ny += step;
+    else if (key_input == 'a' || key_input == 'A' || key_input == KEY_LEFT) nx -= step;
+    else if (key_input == 'd' || key_input == 'D' || key_input == KEY_RIGHT) nx += step;
     else return 0;
 
     if (is_valid_tile(ny, nx)) {
         if (nx != hero->pos_x || ny != hero->pos_y) {
-            hero->pos_x = nx; hero->pos_y = ny; moved = 1;
-            if (!(ny == 0 && nx == 7) && !(ny == 5 && nx == 5)) trigger_random_field_event(hero);
+            hero->pos_x = nx;
+            hero->pos_y = ny;
+            moved = 1;
+
+            if (!(ny == 0 && nx == 7) && !(ny == 5 && nx == 5)) {
+                trigger_random_field_event(hero);
+            }
         }
     }
+
     return moved;
 }

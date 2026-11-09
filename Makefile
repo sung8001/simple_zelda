@@ -1,22 +1,20 @@
-CC       = gcc
-CFLAGS   = -Wall -std=c99 -D_XOPEN_SOURCE=700 -Iinclude
-LDFLAGS  = -lncursesw
+CC = gcc
+CFLAGS = -Wall -Wextra -std=c99 -D_XOPEN_SOURCE=700
+LIBS = -lncursesw
 
-CLIENT_TARGET = zelda_game
-SERVER_TARGET = zelda_rank_server
+SRC = src/main.c src/ui_render.c src/battle_system.c src/map_engine.c src/save_system.c
+HEADERS = include/zelda_game.h include/zelda_ui.h include/zelda_net.h
 
-CLIENT_SRCS   = src/main.c src/ui_render.c src/map_engine.c src/battle_system.c src/save_manager.c
-SERVER_SRCS   = server/rank_server.c
+TARGETS = zelda_game zelda_rank_server
 
-all: $(CLIENT_TARGET) $(SERVER_TARGET)
+all: $(TARGETS)
 
-$(CLIENT_TARGET): $(CLIENT_SRCS)
-	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+zelda_game: $(SRC) $(HEADERS)
+	@mkdir -p saves
+	$(CC) $(CFLAGS) -o zelda_game $(SRC) $(LIBS)
 
-$(SERVER_TARGET): $(SERVER_SRCS)
-	$(CC) $(CFLAGS) -o $@ $^
+zelda_rank_server: server/rank_server.c $(HEADERS)
+	$(CC) $(CFLAGS) -o zelda_rank_server server/rank_server.c
 
 clean:
-	rm -f $(CLIENT_TARGET) $(SERVER_TARGET) saves/*.bin saves/*.dat
-
-.PHONY: all clean
+	rm -f $(TARGETS) saves/*.bin
