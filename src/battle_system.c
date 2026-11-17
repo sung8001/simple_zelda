@@ -10,10 +10,29 @@ static BossMonster g_bosses[4] = {
 
 static BossMonster g_ganon = {"👾 재앙 가논 (Calamity Ganon)", 550, 550, 50, "👾"};
 
-static int execute_qte_typing(const char *target_word, int timeout_sec) {
+// 랜덤 QTE 출제용 공격 / 방어 단어 풀
+static const char *g_attack_words[] = {
+    "slash", "strike", "thrust", "smash", "blade", "charge", "critical", "triforce"
+};
+static const char *g_defense_words[] = {
+    "shield", "guard", "block", "dodge", "barrier", "defend", "evade", "reflect"
+};
+
+#define NUM_WORDS 8
+
+static const char *get_random_attack_word(void) {
+    return g_attack_words[rand() % NUM_WORDS];
+}
+
+static const char *get_random_defense_word(void) {
+    return g_defense_words[rand() % NUM_WORDS];
+}
+
+// select() 시스템 콜을 활용한 3초 제한 비동기 문자열 타이핑 QTE
+static int execute_qte_typing(const char *phase_label, const char *target_word, int timeout_sec) {
     int max_y, max_x;
     getmaxyx(stdscr, max_y, max_x);
-    WINDOW *win_qte = newwin(7, 56, (max_y - 7) / 2, (max_x - 56) / 2);
+    WINDOW *win_qte = newwin(7, 58, (max_y - 7) / 2, (max_x - 58) / 2);
     nodelay(win_qte, TRUE);
     keypad(win_qte, TRUE);
 
@@ -37,9 +56,9 @@ static int execute_qte_typing(const char *target_word, int timeout_sec) {
 
         wclear(win_qte);
         box(win_qte, 0, 0);
-        mvwprintw(win_qte, 1, 2, "⚡ [3초 제한 QTE 타이핑!] 입력 단어: [%s]", target_word);
-        mvwprintw(win_qte, 3, 2, "⏱️ 남은 시간: %.2f 초", remain);
-        mvwprintw(win_qte, 5, 2, "➤ 입력: %s_", input_buf);
+        mvwprintw(win_qte, 1, 2, "%s | 입력 단어: [ %s ]", phase_label, target_word);
+        mvwprintw(win_qte, 3, 2, "⏱️ 남은 시간: %.2f 초 (입력 후 Enter)", remain);
+        mvwprintw(win_qte, 5, 2, "> 입력: %s_", input_buf);
         wrefresh(win_qte);
 
         fd_set fds;
@@ -72,6 +91,7 @@ static int execute_qte_typing(const char *target_word, int timeout_sec) {
 }
 
 static void handle_permadeath(HeroState *hero) {
+    (void)hero;
     clear(); box(stdscr, 0, 0);
     mvprintw(get_centered_y(3), get_centered_x("💀 용사가 전투 중 완전히 쓰러졌습니다..."), "💀 용사가 전투 중 완전히 쓰러졌습니다...");
     mvprintw(get_centered_y(3) + 2, get_centered_x("⚠️ 영구 사망(Permadeath) 시스템으로 인해 세이브 데이터가 삭제됩니다!"), "⚠️ 영구 사망(Permadeath) 시스템으로 인해 세이브 데이터가 삭제됩니다!");
@@ -87,74 +107,95 @@ void trigger_boss_encounter(HeroState *hero, int boss_idx) {
     BossMonster boss = g_bosses[boss_idx];
     int highlight = 0;
     int mipha_used_in_battle = 0;
-    const char *actions[] = {"1. ⚔️ QTE 타이핑 공격 (attack)", "2. 🛡️ QTE 방어 태세 (barrier)", "3. 🧪 포션 체력 회복"};
+    int is_player_turn = 1; // 1: 내 공격 턴, 0: 적 공격 턴
+    const char *actions[] = {"1. ⚔️ QTE 검술 공격 (랜덤 커맨드)", "2. 🧪 포션 체력 회복"};
 
     while (boss.hp > 0 && hero->current_hp > 0) {
         clear();
         box(stdscr, 0, 0);
         int y = 2;
 
-        mvprintw(y, get_centered_x("⚔️ 신수 보스전 진입 ⚔️"), "⚔️ 신수 보스전 진입 ⚔️");
+        mvprintw(y, get_centered_x("⚔️ 신수 보스전 (교대 턴제) ⚔️"), "⚔️ 신수 보스전 (교대 턴제) ⚔️");
         mvprintw(y + 2, 8, "[ %s ] 체력: %d/%d", boss.name, boss.hp, boss.max_hp);
         mvprintw(y + 4, 8, "[ 용사 %s ] HP: %d/%d | 🧪 포션: %d개 | 🔥 콤보: %d 스택", 
                  hero->hero_name, hero->current_hp, hero->max_hp, hero->potion_inventory, hero->combo_count);
 
-        for (int i = 0; i < 3; i++) {
-            if (i == highlight) {
-                attron(A_BOLD | COLOR_PAIR(5));
-                mvprintw(y + 7 + i, 12, "➤ %s", actions[i]);
-                attroff(A_BOLD | COLOR_PAIR(5));
-            } else {
-                mvprintw(y + 7 + i, 12, "  %s", actions[i]);
-            }
-        }
-        refresh();
+        if (is_player_turn) {
+            attron(A_BOLD | COLOR_PAIR(1));
+            mvprintw(y + 6, 8, "▶ [ 내 공격 턴 ] 행동을 선택하세요!");
+            attroff(A_BOLD | COLOR_PAIR(1));
 
-        int ch = getch();
-        if (ch == KEY_UP || ch == 'w' || ch == 'W') highlight = (highlight - 1 + 3) % 3;
-        else if (ch == KEY_DOWN || ch == 's' || ch == 'S') highlight = (highlight + 1) % 3;
-        else if (ch == '\n' || ch == ' ') {
-            if (highlight == 0) {
-                int q_res = execute_qte_typing("attack", 3);
-                if (q_res) {
-                    hero->combo_count++;
-                    int bonus_dmg = hero->combo_count * 5;
-                    int dmg = hero->attack_power + bonus_dmg + (rand() % 10);
-                    boss.hp -= dmg;
-                    hero->total_score += 150 * hero->combo_count;
-                    print_dialog_text("전투 이펙트 💥", "QTE 성공! 크리티컬 타격 성공! (콤보 스택으로 데미지 폭증)");
+            for (int i = 0; i < 2; i++) {
+                if (i == highlight) {
+                    attron(A_BOLD | COLOR_PAIR(5));
+                    mvprintw(y + 8 + i, 12, "> %s", actions[i]);
+                    attroff(A_BOLD | COLOR_PAIR(5));
                 } else {
-                    hero->combo_count = 0;
-                    print_dialog_text("전투 이펙트 ❌", "QTE 시간 초과/오타! 공격 실패 및 콤보 초기화!");
+                    mvprintw(y + 8 + i, 12, "  %s", actions[i]);
                 }
-            } else if (highlight == 1) {
-                int q_res = execute_qte_typing("barrier", 3);
-                if (q_res) {
-                    hero->combo_count++;
-                    int boss_dmg = (boss.base_damage / 3);
-                    hero->current_hp -= boss_dmg;
-                    print_dialog_text("전투 이펙트 🛡️", "QTE 방어 완벽 성공! 받 데미지가 70% 감소했습니다.");
-                } else {
-                    hero->combo_count = 0;
-                    int boss_dmg = boss.base_damage + (rand() % 8);
-                    hero->current_hp -= boss_dmg;
-                    print_dialog_text("전투 이펙트 💥", "방어 QTE 실패! 보스의 묵직한 반격을 직격으로 받아냈습니다.");
+            }
+            refresh();
+
+            int ch = getch();
+            if (ch == KEY_UP || ch == 'w' || ch == 'W') highlight = (highlight - 1 + 2) % 2;
+            else if (ch == KEY_DOWN || ch == 's' || ch == 'S') highlight = (highlight + 1) % 2;
+            else if (ch == '\n' || ch == ' ') {
+                if (highlight == 0) { // 내 공격 턴 -> 공격 QTE
+                    const char *cmd = get_random_attack_word();
+                    int q_res = execute_qte_typing("⚔️ 공격 QTE!", cmd, 3);
+                    if (q_res) {
+                        hero->combo_count++;
+                        int bonus_dmg = hero->combo_count * 5;
+                        int dmg = hero->attack_power + bonus_dmg + (rand() % 10);
+                        boss.hp -= dmg;
+                        hero->total_score += 150 * hero->combo_count;
+                        print_dialog_text("공격 성공 💥", "QTE 성공! 보스에게 강력한 일격을 가했습니다!");
+                    } else {
+                        hero->combo_count = 0;
+                        print_dialog_text("공격 실패 ❌", "QTE 시간 초과 또는 오타! 공격이 빗나갔습니다.");
+                    }
+                    is_player_turn = 0; // 적 턴으로 전환
+                } else if (highlight == 1) { // 포션 사용
+                    if (hero->potion_inventory > 0) {
+                        hero->current_hp = (hero->current_hp + 60 > hero->max_hp) ? hero->max_hp : hero->current_hp + 60;
+                        hero->potion_inventory--;
+                        print_dialog_text("아이템 🧪", "포션을 마셔 체력을 60 회복했습니다! (적 턴으로 넘어갑니다)");
+                        is_player_turn = 0; // 적 턴으로 전환
+                    } else {
+                        print_dialog_text("아이템 ❌", "포션이 부족합니다! 다른 행동을 선택하세요.");
+                    }
                 }
-            } else if (highlight == 2) {
-                if (hero->potion_inventory > 0) {
-                    hero->current_hp = (hero->current_hp + 60 > hero->max_hp) ? hero->max_hp : hero->current_hp + 60;
-                    hero->potion_inventory--;
-                    print_dialog_text("아이템 🧪", "포션을 사용해 체력을 60 회복했습니다!");
-                } else {
-                    print_dialog_text("아이템 ❌", "포션이 부족합니다!");
-                }
+            }
+        } else {
+            // 적의 공격 턴 -> 방어 QTE 발동
+            attron(A_BOLD | COLOR_PAIR(2));
+            mvprintw(y + 6, 8, "⚠️ [ 적의 공격 턴 ] 보스가 공격해옵니다! 방어 QTE를 준비하세요!");
+            attroff(A_BOLD | COLOR_PAIR(2));
+            refresh();
+
+            print_dialog_text(boss.name, "크아아아! 내 공격을 받아내 보아라!");
+
+            const char *def_cmd = get_random_defense_word();
+            int q_res = execute_qte_typing("🛡️ 방어 QTE!", def_cmd, 3);
+            if (q_res) {
+                hero->combo_count++;
+                int boss_dmg = (boss.base_damage / 3);
+                hero->current_hp -= boss_dmg;
+                print_dialog_text("방어 성공 🛡️", "방어 QTE 성공! 방패로 막아내 피해를 70% 경감했습니다!");
+            } else {
+                hero->combo_count = 0;
+                int boss_dmg = boss.base_damage + (rand() % 8);
+                hero->current_hp -= boss_dmg;
+                print_dialog_text("방어 실패 💥", "방어 QTE 실패! 보스의 강력한 공격을 정통으로 맞았습니다!");
             }
 
             if (hero->current_hp <= 0 && hero->token_mipha && !mipha_used_in_battle) {
                 mipha_used_in_battle = 1;
                 hero->current_hp = hero->max_hp;
-                print_dialog_text("미파의 기도 💧", "미파의 영혼이 가워 체력을 100% 회복시키고 부활합니다!");
+                print_dialog_text("미파의 기도 💧", "미파의 영혼이 가호하여 체력을 100% 회복시키고 부활합니다!");
             }
+
+            is_player_turn = 1; // 다시 내 공격 턴으로 전환
         }
     }
 
@@ -167,7 +208,7 @@ void trigger_boss_encounter(HeroState *hero, int boss_idx) {
 
         if (boss_idx == 0) {
             hero->token_urbosa = 1; hero->attack_power += 25;
-            print_dialog_text("우르보사의 영혼 ⚡", "[우르보사의 가누다] 획득! (공격력 +25 상승)");
+            print_dialog_text("우르보사의 영혼 ⚡", "[우르보사의 분노] 획득! (공격력 +25 상승)");
         } else if (boss_idx == 1) {
             hero->token_mipha = 1;
             print_dialog_text("미파의 영혼 💧", "[미파의 기도] 획득! (사망 시 1회 풀부활)");
@@ -205,61 +246,82 @@ void trigger_final_ganon_battle(HeroState *hero) {
     BossMonster ganon = g_ganon;
     int highlight = 0;
     int mipha_used_in_battle = 0;
-    const char *actions[] = {"1. ⚔️ QTE 타이핑 공격 (attack)", "2. 🛡️ QTE 방어 태세 (barrier)", "3. 🧪 포션 체력 회복"};
+    int is_player_turn = 1;
+    const char *actions[] = {"1. ⚔️ QTE 퇴마 일격 (랜덤 커맨드)", "2. 🧪 포션 체력 회복"};
 
     while (ganon.hp > 0 && hero->current_hp > 0) {
         clear();
         box(stdscr, 0, 0);
         int y = 2;
 
-        mvprintw(y, get_centered_x("👑 최종 결전: 재앙 가논 👑"), "👑 최종 결전: 재앙 가논 👑");
+        mvprintw(y, get_centered_x("👑 최종 결전: 재앙 가논 (교대 턴제) 👑"), "👑 최종 결전: 재앙 가논 (교대 턴제) 👑");
         mvprintw(y + 2, 8, "[ %s ] 체력: %d/%d", ganon.name, ganon.hp, ganon.max_hp);
         mvprintw(y + 4, 8, "[ 용사 %s & 젤다 ] HP: %d/%d | 🧪 포션: %d개 | 🔥 콤보: %d", 
                  hero->hero_name, hero->current_hp, hero->max_hp, hero->potion_inventory, hero->combo_count);
 
-        for (int i = 0; i < 3; i++) {
-            if (i == highlight) {
-                attron(A_BOLD | COLOR_PAIR(2));
-                mvprintw(y + 7 + i, 12, "➤ %s", actions[i]);
-                attroff(A_BOLD | COLOR_PAIR(2));
-            } else {
-                mvprintw(y + 7 + i, 12, "  %s", actions[i]);
-            }
-        }
-        refresh();
+        if (is_player_turn) {
+            attron(A_BOLD | COLOR_PAIR(1));
+            mvprintw(y + 6, 8, "▶ [ 내 공격 턴 ] 행동을 선택하세요!");
+            attroff(A_BOLD | COLOR_PAIR(1));
 
-        int ch = getch();
-        if (ch == KEY_UP || ch == 'w' || ch == 'W') highlight = (highlight - 1 + 3) % 3;
-        else if (ch == KEY_DOWN || ch == 's' || ch == 'S') highlight = (highlight + 1) % 3;
-        else if (ch == '\n' || ch == ' ') {
-            if (highlight == 0) {
-                int q_res = execute_qte_typing("attack", 3);
-                if (q_res) {
-                    hero->combo_count++;
-                    int dmg = (hero->attack_power * 2) + (hero->combo_count * 10);
-                    ganon.hp -= dmg;
-                    hero->total_score += 300 * hero->combo_count;
-                    print_dialog_text("퇴마의 빛 ✨", "가논에게 마스터소드의 퇴마 일격을 꽂아 넣었습니다!");
+            for (int i = 0; i < 2; i++) {
+                if (i == highlight) {
+                    attron(A_BOLD | COLOR_PAIR(2));
+                    mvprintw(y + 8 + i, 12, "> %s", actions[i]);
+                    attroff(A_BOLD | COLOR_PAIR(2));
                 } else {
-                    hero->combo_count = 0;
-                    print_dialog_text("공격 실패 ❌", "QTE 실패! 가논이 공격을 받아쳤습니다.");
+                    mvprintw(y + 8 + i, 12, "  %s", actions[i]);
                 }
-            } else if (highlight == 1) {
-                int q_res = execute_qte_typing("barrier", 3);
-                if (q_res) {
-                    hero->combo_count++;
-                    hero->current_hp -= (ganon.base_damage / 4);
-                    print_dialog_text("방어 성공 🛡️", "가논의 흑마법을 결계로 막아냈습니다.");
-                } else {
-                    hero->combo_count = 0;
-                    hero->current_hp -= ganon.base_damage;
-                    print_dialog_text("방어 실패 💥", "가논의 원념 공격에 직격 당했습니다!");
+            }
+            refresh();
+
+            int ch = getch();
+            if (ch == KEY_UP || ch == 'w' || ch == 'W') highlight = (highlight - 1 + 2) % 2;
+            else if (ch == KEY_DOWN || ch == 's' || ch == 'S') highlight = (highlight + 1) % 2;
+            else if (ch == '\n' || ch == ' ') {
+                if (highlight == 0) {
+                    const char *cmd = get_random_attack_word();
+                    int q_res = execute_qte_typing("⚔️ 퇴마 공격 QTE!", cmd, 3);
+                    if (q_res) {
+                        hero->combo_count++;
+                        int dmg = (hero->attack_power * 2) + (hero->combo_count * 10);
+                        ganon.hp -= dmg;
+                        hero->total_score += 300 * hero->combo_count;
+                        print_dialog_text("퇴마의 빛 ✨", "가논에게 강력한 일격을 꽂아 넣었습니다!");
+                    } else {
+                        hero->combo_count = 0;
+                        print_dialog_text("공격 실패 ❌", "QTE 실패! 가논이 공격을 받아쳤습니다.");
+                    }
+                    is_player_turn = 0;
+                } else if (highlight == 1) {
+                    if (hero->potion_inventory > 0) {
+                        hero->current_hp = (hero->current_hp + 70 > hero->max_hp) ? hero->max_hp : hero->current_hp + 70;
+                        hero->potion_inventory--;
+                        print_dialog_text("아이템 🧪", "포션을 마셔 체력을 70 회복했습니다!");
+                        is_player_turn = 0;
+                    } else {
+                        print_dialog_text("아이템 ❌", "포션이 부족합니다!");
+                    }
                 }
-            } else if (highlight == 2) {
-                if (hero->potion_inventory > 0) {
-                    hero->current_hp = (hero->current_hp + 70 > hero->max_hp) ? hero->max_hp : hero->current_hp + 70;
-                    hero->potion_inventory--;
-                }
+            }
+        } else {
+            attron(A_BOLD | COLOR_PAIR(2));
+            mvprintw(y + 6, 8, "⚠️ [ 적의 공격 턴 ] 재앙 가논이 원념을 발사합니다! 방어 QTE를 준비하세요!");
+            attroff(A_BOLD | COLOR_PAIR(2));
+            refresh();
+
+            print_dialog_text("재앙 가논 👾", "사라져라, 하이랄의 용사여!!");
+
+            const char *def_cmd = get_random_defense_word();
+            int q_res = execute_qte_typing("🛡️ 결계 방어 QTE!", def_cmd, 3);
+            if (q_res) {
+                hero->combo_count++;
+                hero->current_hp -= (ganon.base_damage / 4);
+                print_dialog_text("방어 성공 🛡️", "가논의 흑마법을 결계로 막아냈습니다!");
+            } else {
+                hero->combo_count = 0;
+                hero->current_hp -= ganon.base_damage;
+                print_dialog_text("방어 실패 💥", "가논의 원념 공격에 직격 당했습니다!");
             }
 
             if (hero->current_hp <= 0 && hero->token_mipha && !mipha_used_in_battle) {
@@ -267,6 +329,8 @@ void trigger_final_ganon_battle(HeroState *hero) {
                 hero->current_hp = hero->max_hp;
                 print_dialog_text("미파의 기도 💧", "미파의 영혼이 체력을 완전 회복시킵니다!");
             }
+
+            is_player_turn = 1;
         }
     }
 

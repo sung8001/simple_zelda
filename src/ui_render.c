@@ -22,7 +22,8 @@ int get_display_width(const char *str) {
 
 int get_centered_x(const char *text) {
     int col = getmaxx(stdscr);
-    return (col - get_display_width(text)) / 2;
+    int x = (col - get_display_width(text)) / 2;
+    return (x > 2) ? x : 2;
 }
 
 int get_centered_y(int lines) {
@@ -31,7 +32,11 @@ int get_centered_y(int lines) {
 }
 
 void init_zelda_ui(void) {
-    setlocale(LC_ALL, "");
+    if (setlocale(LC_ALL, "C.UTF-8") == NULL) {
+        if (setlocale(LC_ALL, "en_US.UTF-8") == NULL) {
+            setlocale(LC_ALL, "");
+        }
+    }
     initscr();
     cbreak();
     noecho();
@@ -70,12 +75,14 @@ static void draw_title_decorations(void) {
     attroff(COLOR_PAIR(1));
 
     attron(COLOR_PAIR(4) | A_BOLD);
-    const char *guide = "🎮 조작법: WASD(이동 / 연타 대시) | E(스탯&인벤토리) | ESC(시스템 메뉴)";
+    const char *guide_long  = "조작법: WASD(이동/대시) | E(스탯&인벤토리) | ESC(시스템 메뉴)";
+    const char *guide_short = "WASD: 이동 | E: 인벤토리 | ESC: 메뉴";
+    const char *guide = (max_x >= get_display_width(guide_long) + 4) ? guide_long : guide_short;
     mvprintw(max_y - 4, get_centered_x(guide), "%s", guide);
     attroff(COLOR_PAIR(4) | A_BOLD);
 
     attron(COLOR_PAIR(6) | A_BOLD);
-    const char *footer = "ⓒ System Programming 001 Team 9 - 정우성 방민종";
+    const char *footer = "(c) System Programming 001 Team 9 - 정우성 방민종";
     mvprintw(max_y - 2, get_centered_x(footer), "%s", footer);
     attroff(COLOR_PAIR(6) | A_BOLD);
 }
@@ -83,16 +90,18 @@ static void draw_title_decorations(void) {
 int show_title_screen(void) {
     const char *top_text = "T H E   L E G E N D   O F";
     
+    // 첫 글자 Z 대각선 형태를 살린 46칸 고정폭 블록 배너
     const char *title_ascii[] = {
         "████████╗ ███████╗ ██╗      ██████╗    █████╗ ",
-        "╚══███╔═╝ ██╔════╝ ██║      ██╔══██╗ ██╔══██╗",
-        "   ███╔╝   █████╗   ██║      ██║  ██║ ███████║",
-        "  ███╔╝    ██╔══╝   ██║      ██║  ██║ ██╔══██║",
-        "████████╗ ███████╗ ███████╗ ██████╔╝ ██║  ██║",
-        "╚═══════╝ ╚══════╝ ╚══════╝ ╚═════╝  ╚═╝  ╚═╝"
+        "╚════███║ ██╔════╝ ██║      ██╔══██╗  ██╔══██╗",
+        "   ███╔═╝ █████╗   ██║      ██║  ██║  ███████║",
+        " ███╔═╝   ██╔══╝   ██║      ██║  ██║  ██╔══██║",
+        "████████╗ ███████╗ ███████╗ ██████╔╝  ██║  ██║",
+        "╚═══════╝ ╚══════╝ ╚══════╝ ╚═════╝   ╚═╝  ╚═╝"
     };
     int title_lines = sizeof(title_ascii) / sizeof(title_ascii[0]);
     const char *sub_title = "근데 이제 쓸모없는 것을 너무 줄인";
+    const char *divider = "──────────────────────────────────────────────────";
     const char *menu_options[] = { "새 게임 시작하기", "세이브 불러오기", "게임 종료" };
     int num_options = 3;
     int highlight = 0;
@@ -103,15 +112,16 @@ int show_title_screen(void) {
 
         attron(COLOR_PAIR(4) | A_BOLD);
         mvprintw(2, get_centered_x(top_text), "%s", top_text);
+        int base_x = get_centered_x(title_ascii[0]);
         for (int i = 0; i < title_lines; i++) {
-            mvprintw(i + 4, get_centered_x(title_ascii[i]), "%s", title_ascii[i]);
+            mvprintw(i + 4, base_x, "%s", title_ascii[i]);
         }
         attroff(COLOR_PAIR(4) | A_BOLD);
 
         attron(COLOR_PAIR(1));
-        mvprintw(11, get_centered_x("──────────────────────────────────────────────────"), "──────────────────────────────────────────────────");
+        mvprintw(11, get_centered_x(divider), "%s", divider);
         mvprintw(12, get_centered_x(sub_title), "%s", sub_title);
-        mvprintw(13, get_centered_x("──────────────────────────────────────────────────"), "──────────────────────────────────────────────────");
+        mvprintw(13, get_centered_x(divider), "%s", divider);
         attroff(COLOR_PAIR(1));
 
         draw_title_decorations();
@@ -295,7 +305,7 @@ void show_inventory_menu(const HeroState *hero) {
     mvwprintw(inv, 8, 6, "- 장착 무기  : %s", hero->has_master_sword ? "🗡️ 마스터소드 (기본 ATK +40 폭증!)" : "🗡️ 낡은 목검");
 
     mvwprintw(inv, 10, 4, "[ 4대 영걸의 증표 소지 현황 ]");
-    mvwprintw(inv, 11, 6, "⚡ 우르보사의 가누다: %s", hero->token_urbosa ? "✅ 획득 (공격력 +25)" : "❌ 미획득");
+    mvwprintw(inv, 11, 6, "⚡ 우르보사의 분노 : %s", hero->token_urbosa ? "✅ 획득 (공격력 +25)" : "❌ 미획득");
     mvwprintw(inv, 12, 6, "💧 미파의 기도     : %s", hero->token_mipha ? "✅ 획득 (사망 시 1회 풀부활)" : "❌ 미획득");
     mvwprintw(inv, 13, 6, "🔥 다르케르의 수호 : %s", hero->token_daruk ? "✅ 획득 (최대 체력 +50)" : "❌ 미획득");
     mvwprintw(inv, 14, 6, "🌪️ 리발의 용오름   : %s", hero->token_revali ? "✅ 획득 (WASD 더블클릭 2칸 대시)" : "❌ 미획득");
