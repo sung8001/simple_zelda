@@ -13,6 +13,7 @@
 #include <sys/select.h>
 #include <arpa/inet.h>
 #include <sys/time.h>
+#include <time.h>
 #include <ncursesw/ncurses.h>
 
 #define BOARD_DIM 11
@@ -26,22 +27,23 @@ typedef struct {
     int potion_inventory;
     int move_range;
     int has_master_sword;
-    int boss_slain[4];    // 0:사막(전기), 1:조라(물), 2:데스마운틴(불), 3:리토(바람)
+    int boss_slain[4];
     
-    // 4대 영걸 증표
     int token_urbosa; 
     int token_mipha;  
     int token_daruk;  
     int token_revali; 
 
     int combo_count;
+    int max_combo;
     int total_score;
     int ganon_defeated;
     int total_turns;
+    double clear_time_sec;
 } HeroState;
 
 typedef struct {
-    char name[32];
+    char name[48];
     int hp, max_hp;
     int base_damage;
     char symbol[8];

@@ -1,0 +1,4 @@
+*.o
+zelda_game
+zelda_rank_server
+saves/*.bin

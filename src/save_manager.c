@@ -2,6 +2,7 @@
 #include "../include/zelda_ui.h"
 
 void execute_binary_save(const HeroState *hero, int slot_index) {
+    mkdir("saves", 0755);
     char path[64];
     snprintf(path, sizeof(path), "saves/zelda_slot%d.bin", slot_index);
 
@@ -60,11 +61,11 @@ int open_save_selection_menu(HeroState *hero) {
         if (execute_binary_load(hero, ch)) return 1;
     }
 
+    memset(hero, 0, sizeof(HeroState));
     strcpy(hero->hero_name, "Link");
-    hero->pos_x = 0; hero->pos_y = 0;
+    hero->pos_x = 5; hero->pos_y = 0;
     hero->current_hp = 100; hero->max_hp = 100;
     hero->attack_power = 25; hero->potion_inventory = 3;
-    hero->move_range = 1; hero->total_turns = 0;
-    memset(hero->boss_slain, 0, sizeof(hero->boss_slain));
+    hero->move_range = 1;
     return 0;
 }

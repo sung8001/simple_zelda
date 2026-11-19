@@ -1,6 +1,8 @@
 #include "../include/zelda_game.h"
 #include "../include/zelda_ui.h"
 
+extern void trigger_bokoblin_encounter(HeroState *hero);
+
 static int g_last_key = 0;
 static struct timeval g_last_time;
 
@@ -22,19 +24,11 @@ static int is_valid_tile(int r, int c) {
 
 static void trigger_random_field_event(HeroState *hero) {
     int roll = rand() % 100;
-    if (roll < 10) {
+    if (roll < 5) {
         hero->potion_inventory++;
-        print_dialog_text("🎁 보물상자 발견!", "길목에서 비밀 상자를 찾아 회복 포션 1개를 획득했습니다!");
-    } else if (roll >= 10 && roll < 18) {
-        print_dialog_text("👾 몬스터 습격!", "야생의 보코블린이 튀어나왔습니다!");
-        int sub_roll = rand() % 2;
-        if (sub_roll == 0) {
-            hero->current_hp -= 15;
-            print_dialog_text("피해 발생 💥", "기습을 당해 HP가 15 감소했습니다.");
-        } else {
-            hero->total_score += 300;
-            print_dialog_text("격퇴 성공 ⚔️", "잽싸게 몬스터를 반격하여 물리쳤습니다! (+300 점)");
-        }
+        print_dialog_text("보물상자", "포션 +1 획득.");
+    } else if (roll < 11) {
+        trigger_bokoblin_encounter(hero);
     }
 }
 
@@ -68,7 +62,15 @@ int process_hero_movement(HeroState *hero, int key_input) {
             hero->pos_y = ny;
             moved = 1;
 
-            if (!(ny == 0 && nx == 7) && !(ny == 5 && nx == 5)) {
+            int is_special_tile =
+                (ny == 0 && nx == 7) ||
+                (ny == 5 && nx == 5) ||
+                (ny == 0 && nx == 0) ||
+                (ny == 10 && nx == 0) ||
+                (ny == 10 && nx == 10) ||
+                (ny == 0 && nx == 10);
+
+            if (!is_special_tile) {
                 trigger_random_field_event(hero);
             }
         }
